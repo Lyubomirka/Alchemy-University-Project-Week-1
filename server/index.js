@@ -1,4 +1,7 @@
 const express = require("express");
+const secp = require("@noble/secp256k1");
+const {toHex, utf8ToBytes} = require ("ethereum-cryptography/utils");
+const { keccak256 } = require ("ethereum-cryptography/keccak");
 const app = express();
 const cors = require("cors");
 const port = 3042;
@@ -7,9 +10,9 @@ app.use(cors());
 app.use(express.json());
 
 const balances = {
-  "04d9ca9e8a6095fdaf081faefe45155da851751c12910f314859a940f1f812e0c000e42ec83a15660c095d1042256b9e0e1d6fe703ef4030b5a0dc95d82cb1413c": 100,
-  "04183253b7d8ada2bcc6e14d0d401576c5ca04f624188c6e0dac88dfa6667266a9c273d836eb9fcafc40547f8aff752ea47156a2036678bce8d68c9a04cf3566ce": 50,
-  "0494514a4851efa7f870aef35d010de35890e355808228556894307b38787ee67dc71e22ed9af91dd90755fef4ebc856e10e5db6b08630b50ce85653dbbdb6030d": 75,
+  "0462ed381bbf383ad0e0d511223ecac5b46c9e72bc6d09ac54e1c4d7712e541d3eb1c054db9413426a68d79ed3cfd3ff8b1d97c1d5a700b02132a19a99ae64385d": 100,
+  "0449110081e24a97518b8bc72f442d3186204f66a3fe3cab2db408dda0957ca5405a1b2348788885953fbbe0a3a450a1d0b45a941b4ee6945cfc7ddb74fb7f9a37": 50,
+  "04925be284e1e6c7cf469a9ee76a2b348830e5ddc981959c20cf20038558d784320a9879aee63a0f95c198bf1e9d60705d85d79de87925a13938a06094479a62f2": 75,
 };
 
 app.get("/balance/:address", (req, res) => {
@@ -18,28 +21,36 @@ app.get("/balance/:address", (req, res) => {
   res.send({ balance });
 });
 
-app.post("/send", async (req, res) => {
-  const { sender, recipient, amount, signature, recovery } = req.body;
+app.post("/send", (req, res) => {
+  const { sender, recipient, amount, signature, recoveryBit } = req.body;
 
-  const bytes = utf8ToBytes(JSON.stringify({ sender, recipient, amount }));
-  const hash = keccak256(bytes);
-  const sig = new Uint8Array(signature);
+  if(!signature) res.status(404).send({ message: "signature dont was provide" });
+  if(!recoveryBit) res.status(400).send({ message: "recovery dont was provide" });
 
-  const publicKey = await secp.recoverPublicKey(hash, sig, recovery);
+  try {
 
-  if(toHex(publicKey) !== sender){
-    res.status(400).send({ message: "signature is not valid" });
-  }
+    const bytes = utf8ToBytes(JSON.stringify({ sender, recipient, amount }));
+    const hash = keccak256(bytes);
+    const sig = new Uint8Array(signature);
 
-  setInitialBalance(sender);
-  setInitialBalance(recipient);
+    const publicKey = secp.recoverPublicKey(hash, sig, recoveryBit);
 
-  if (balances[sender] < amount) {
-    res.status(400).send({ message: "Not enough funds!" });
-  } else {
-    balances[sender] -= amount;
-    balances[recipient] += amount;
-    res.send({ balance: balances[sender] });
+    if(toHex(publicKey) !== sender){
+      res.status(400).send({ message: "signature is not valid" });
+    }
+
+    setInitialBalance(sender);
+    setInitialBalance(recipient);
+
+    if (balances[sender] < amount) {
+      res.status(400).send({ message: "Not enough funds!" });
+    } else {
+      balances[sender] -= amount;
+      balances[recipient] += amount;
+      res.send({ balance: balances[sender] });
+    }
+  } catch(error) {
+    console.log(error.message);
   }
 });
 

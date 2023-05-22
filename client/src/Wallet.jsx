@@ -8,6 +8,7 @@ function Wallet({ address, setAddress, balance, setBalance, privateKey, setPriva
     setPrivateKey(privateKey);
     const address =  toHex(secp.getPublicKey(privateKey));
     setAddress(address)
+    console.log(address);
     if (address) {
       const {
         data: { balance },
